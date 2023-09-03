@@ -12,6 +12,7 @@ import (
 
 	"github.com/pion/mediadevices"
 	"github.com/pion/mediadevices/pkg/prop"
+	"github.com/pion/mediadevices/pkg/frame"
 
 	// _ "github.com/pion/mediadevices/pkg/driver/videotest"
 	_ "github.com/pion/mediadevices/pkg/driver/camera" // This is required to register camera adapter
@@ -25,11 +26,11 @@ func must(err error) {
 }
 
 func main() {
-	webcam_url := "localhost:8080"
+	webcam_url := "127.0.0.1:8080"
 
 	device_info_list := mediadevices.EnumerateDevices()
 
-	select_label := "obs-virtual-cam-device"
+	select_label := "usb-GG-220402-CX_Depstech_webcam_MIC_01.00.00-video-index0;video0"
 
 	select_id := ""
 	for _, d := range device_info_list {
@@ -49,6 +50,7 @@ func main() {
 			constraint.Width = prop.Int(1920)
 			constraint.Height = prop.Int(1080)
 			constraint.FrameRate = prop.Float(30)
+			constraint.FrameFormat = prop.FrameFormat(frame.FormatMJPEG)
 		},
 	})
 	must(err)
@@ -59,7 +61,7 @@ func main() {
 	videoTrack := track.(*mediadevices.VideoTrack)
 	defer videoTrack.Close()
 
-	http.HandleFunc("/webcam/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		action := "stream"
 		if get_action := r.URL.Query().Get("action"); get_action != "" {
 			action = get_action
@@ -74,6 +76,7 @@ func main() {
 
 		partHeader := make(textproto.MIMEHeader)
 		partHeader.Add("Content-Type", "image/jpeg")
+		//partHeader.Add("Content-Type", "video/x-jpeg")
 
 		for {
 			frame, release, err := videoReader.Read()
@@ -82,7 +85,9 @@ func main() {
 			}
 			must(err)
 
-			err = jpeg.Encode(&buf, frame, nil)
+			//err = jpeg.Encode(&buf, frame, nil)
+			encode_option := jpeg.Options{Quality:85}
+			err = jpeg.Encode(&buf, frame, &encode_option)
 			// Since we're done with img, we need to release img so that that the original owner can reuse
 			// this memory.
 			release()
