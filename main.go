@@ -9,10 +9,11 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"os"
 
 	"github.com/pion/mediadevices"
-	"github.com/pion/mediadevices/pkg/prop"
 	"github.com/pion/mediadevices/pkg/frame"
+	"github.com/pion/mediadevices/pkg/prop"
 
 	// _ "github.com/pion/mediadevices/pkg/driver/videotest"
 	_ "github.com/pion/mediadevices/pkg/driver/camera" // This is required to register camera adapter
@@ -28,9 +29,16 @@ func must(err error) {
 func main() {
 	webcam_url := "127.0.0.1:8080"
 
+	if len(os.Args) != 2 {
+		fmt.Printf("usage: %s host:port\n", os.Args[0])
+		fmt.Printf("plz set usb device name")
+		return
+	}
+
 	device_info_list := mediadevices.EnumerateDevices()
 
-	select_label := "usb-GG-220402-CX_Depstech_webcam_MIC_01.00.00-video-index0;video0"
+	//select_label := "usb-GG-220402-CX_Depstech_webcam_MIC_01.00.00-video-index0;video0"
+	select_label := os.Args[1]
 
 	select_id := ""
 	for _, d := range device_info_list {
@@ -86,7 +94,7 @@ func main() {
 			must(err)
 
 			//err = jpeg.Encode(&buf, frame, nil)
-			encode_option := jpeg.Options{Quality:85}
+			encode_option := jpeg.Options{Quality: 85}
 			err = jpeg.Encode(&buf, frame, &encode_option)
 			// Since we're done with img, we need to release img so that that the original owner can reuse
 			// this memory.
