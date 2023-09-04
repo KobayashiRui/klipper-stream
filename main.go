@@ -76,16 +76,16 @@ func main() {
 
 		var buf bytes.Buffer
 		videoReader := videoTrack.NewReader(false)
-		mimeWriter := multipart.NewWriter(w)
+		w.Header().Add("Access-Control-Allow-Credentials", "true")
+		w.Header().Add("Access-Control-Allow-Origin", "*")
+		cacheControl := "no-stroe, no-cache, must-revalidate, proxy-revalidate, pre-check=0, post-check=0, max-age-0"
+		w.Header().Add("Cache-Control", cacheControl)
+		w.Header().Add("Pragma", "no-cache")
+		w.Header().Add("Connection", "keep-alive")
 
-		contentType := fmt.Sprintf("multipart/x-mixed-replace;boundary=%s", mimeWriter.Boundary())
-		w.Header().Add("Content-Type", contentType)
-
-		partHeader := make(textproto.MIMEHeader)
-		partHeader.Add("Content-Type", "image/jpeg")
-		//partHeader.Add("Content-Type", "video/x-jpeg")
-
-		for {
+		if action == "snapshot" {
+			contentType := "image/jpeg"
+			w.Header().Add("Content-Type", contentType)
 			frame, release, err := videoReader.Read()
 			if err == io.EOF {
 				return
@@ -100,15 +100,39 @@ func main() {
 			release()
 			must(err)
 
-			partWriter, err := mimeWriter.CreatePart(partHeader)
-			must(err)
-
-			_, err = partWriter.Write(buf.Bytes())
+			_, err = w.Write(buf.Bytes())
 			buf.Reset()
 			must(err)
+		} else {
+			mimeWriter := multipart.NewWriter(w)
+			contentType := fmt.Sprintf("multipart/x-mixed-replace;boundary=%s", mimeWriter.Boundary())
+			w.Header().Add("Content-Type", contentType)
 
-			if action == "snapshot" {
-				return
+			partHeader := make(textproto.MIMEHeader)
+			partHeader.Add("Content-Type", "image/jpeg")
+			//partHeader.Add("Content-Type", "video/x-jpeg")
+
+			for {
+				frame, release, err := videoReader.Read()
+				if err == io.EOF {
+					return
+				}
+				must(err)
+
+				//err = jpeg.Encode(&buf, frame, nil)
+				encode_option := jpeg.Options{Quality: 85}
+				err = jpeg.Encode(&buf, frame, &encode_option)
+				// Since we're done with img, we need to release img so that that the original owner can reuse
+				// this memory.
+				release()
+				must(err)
+
+				partWriter, err := mimeWriter.CreatePart(partHeader)
+				must(err)
+
+				_, err = partWriter.Write(buf.Bytes())
+				buf.Reset()
+				must(err)
 			}
 		}
 	})
