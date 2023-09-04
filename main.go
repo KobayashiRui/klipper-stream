@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"os"
+	"image"
 
 	"github.com/pion/mediadevices"
 	"github.com/pion/mediadevices/pkg/frame"
@@ -18,12 +19,40 @@ import (
 	// _ "github.com/pion/mediadevices/pkg/driver/videotest"
 	_ "github.com/pion/mediadevices/pkg/driver/camera" // This is required to register camera adapter
 	//_ "github.com/pion/mediadevices/pkg/driver/microphone"
+	"sync"
 )
 
 func must(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+type frame_data struct {
+	mu sync.Mutex
+	image_data *image.Image
+}
+
+func (f *frame_data) read_camera(track *mediadevices.VideoTrack){
+	videoReader := track.NewReader(false)
+	for {
+		frame, release, err := videoReader.Read()
+		if err == io.EOF {
+			return
+		}
+		must(err)
+		f.mu.Lock()
+		f.image_data = &frame
+		f.mu.Unlock()
+		release()
+	}
+}
+
+func (f *frame_data) load_image() image.Image {
+	//f.mu.Lock()
+	//defer f.mu.Unlock()
+
+	return *f.image_data
 }
 
 func main() {
@@ -68,6 +97,11 @@ func main() {
 	videoTrack := track.(*mediadevices.VideoTrack)
 	defer videoTrack.Close()
 
+	//image_ch := make(chan image.Image)
+	latest_frame := frame_data{}
+
+	go latest_frame.read_camera(videoTrack)
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		action := "stream"
 		if get_action := r.URL.Query().Get("action"); get_action != "" {
@@ -75,7 +109,7 @@ func main() {
 		}
 
 		var buf bytes.Buffer
-		videoReader := videoTrack.NewReader(false)
+		//videoReader := videoTrack.NewReader(false)
 		w.Header().Add("Access-Control-Allow-Credentials", "true")
 		w.Header().Add("Access-Control-Allow-Origin", "*")
 		cacheControl := "no-stroe, no-cache, must-revalidate, proxy-revalidate, pre-check=0, post-check=0, max-age-0"
@@ -86,18 +120,19 @@ func main() {
 		if action == "snapshot" {
 			contentType := "image/jpeg"
 			w.Header().Add("Content-Type", contentType)
-			frame, release, err := videoReader.Read()
-			if err == io.EOF {
-				return
-			}
-			must(err)
+			//frame, release, err := videoReader.Read()
+			//if err == io.EOF {
+			//	return
+			//}
+			//must(err)
 
 			//err = jpeg.Encode(&buf, frame, nil)
 			encode_option := jpeg.Options{Quality: 85}
+			frame:= latest_frame.load_image()
 			err = jpeg.Encode(&buf, frame, &encode_option)
 			// Since we're done with img, we need to release img so that that the original owner can reuse
 			// this memory.
-			release()
+			//release()
 			must(err)
 
 			_, err = w.Write(buf.Bytes())
@@ -113,6 +148,7 @@ func main() {
 			//partHeader.Add("Content-Type", "video/x-jpeg")
 
 			for {
+				/*
 				frame, release, err := videoReader.Read()
 				if err == io.EOF {
 					return
@@ -120,11 +156,19 @@ func main() {
 				must(err)
 
 				//err = jpeg.Encode(&buf, frame, nil)
-				encode_option := jpeg.Options{Quality: 85}
+				encode_option := jpeg.Options{Quality: 75}
 				err = jpeg.Encode(&buf, frame, &encode_option)
 				// Since we're done with img, we need to release img so that that the original owner can reuse
 				// this memory.
 				release()
+				must(err)
+				*/
+
+
+				encode_option := jpeg.Options{Quality: 75}
+				//frame:= *latest_frame.image_data
+				frame:= latest_frame.load_image()
+				err = jpeg.Encode(&buf, frame, &encode_option)
 				must(err)
 
 				partWriter, err := mimeWriter.CreatePart(partHeader)
@@ -135,6 +179,9 @@ func main() {
 				must(err)
 			}
 		}
+	})
+
+	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request){
 	})
 
 	fmt.Printf("listening on %s\n", webcam_url)
