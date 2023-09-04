@@ -30,7 +30,7 @@ func main() {
 	webcam_url := "127.0.0.1:8080"
 
 	if len(os.Args) != 2 {
-		fmt.Printf("plz set usb device name")
+		fmt.Printf("plz set usb device name\n")
 		return
 	}
 
