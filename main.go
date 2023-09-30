@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"image/jpeg"
 	"io"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
 	"os"
+	"strings"
 
 	"github.com/pion/mediadevices"
 	"github.com/pion/mediadevices/pkg/frame"
@@ -28,6 +28,7 @@ func must(err error) {
 
 func main() {
 	webcam_url := "127.0.0.1:8080"
+	camera_list_url := "127.0.0.1:8090"
 
 	if len(os.Args) != 2 {
 		fmt.Printf("plz set usb device name\n")
@@ -39,12 +40,15 @@ func main() {
 	//select_label := "usb-GG-220402-CX_Depstech_webcam_MIC_01.00.00-video-index0;video0"
 	select_label := os.Args[1]
 
+	var labels []string
+
 	select_id := ""
 	for _, d := range device_info_list {
 		fmt.Printf("############# Get Device Info #############\n")
 		fmt.Printf("DeviceID: %v\n", d.DeviceID)
 		fmt.Printf("Label: %v\n", d.Label)
 		fmt.Printf("###########################################\n")
+		labels = append(labels, d.Label)
 		if d.Label == select_label {
 			select_id = d.DeviceID
 		}
@@ -68,7 +72,10 @@ func main() {
 	videoTrack := track.(*mediadevices.VideoTrack)
 	defer videoTrack.Close()
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	serverMuxCamera0 := http.NewServeMux()
+	serverMuxCameraList := http.NewServeMux()
+
+	serverMuxCamera0.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		action := "stream"
 		if get_action := r.URL.Query().Get("action"); get_action != "" {
 			action = get_action
@@ -137,6 +144,15 @@ func main() {
 		}
 	})
 
+	serverMuxCameraList.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+
+		res := strings.Join(labels, "\n")
+
+		fmt.Fprintf(w, res)
+	})
+
 	fmt.Printf("listening on %s\n", webcam_url)
-	log.Println(http.ListenAndServe(webcam_url, nil))
+	//log.Println(http.ListenAndServe(webcam_url, nil))
+	go http.ListenAndServe(webcam_url, serverMuxCamera0)
+	http.ListenAndServe(camera_list_url, serverMuxCameraList)
 }
