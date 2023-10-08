@@ -2,7 +2,10 @@ module github.com/KobayashiRui/klipper-stream
 
 go 1.19
 
-require github.com/pion/mediadevices v0.5.0
+require (
+	github.com/go-ini/ini v1.67.0
+	github.com/pion/mediadevices v0.5.0
+)
 
 replace github.com/pion/mediadevices => github.com/KobayashiRui/mediadevices v0.0.0-20230901020012-3582e5d01729
 
